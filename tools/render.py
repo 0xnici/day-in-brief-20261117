@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
-"""Render a one-page newspaper front page summing up one day's world news.
+"""Typeset one day's world news as a one-page newspaper front page.
 
-Usage: render_news.py <YYYY-MM-DD> <out.png>
-The day's stories are the CONTENT table below — wire reporting of that date,
-rewritten as headlines + two-line briefs. Layout: masthead with the date in
-large type, a 2x3 grid of story panels (region kicker, serif headline,
-brief), and an "also today" strip. Everything is drawn with PIL on system
-fonts; no network, fully deterministic.
+Usage: render.py <YYYY-MM-DD> <out.png>
+
+The CONTENT table below holds the stories: wire reporting of the date,
+rewritten as a headline plus a two-line brief per story, six stories per
+day and a one-line "also today" strip for the rest. The layout is a
+masthead with the weekday and date in large serif type, a 2x3 grid of
+story panels (region kicker, headline, brief), then the strip and a
+colophon. Everything is drawn with PIL on system fonts; there is no
+network access and no randomness, so a day always renders to the same
+PNG bytes.
 """
 import sys
 from PIL import Image, ImageDraw, ImageFont
@@ -69,27 +73,30 @@ CONTENT = {
 
 
 def wrap(draw, text, font, width):
-    words, lines, cur = text.split(), [], ""
-    for w_ in words:
-        trial = (cur + " " + w_).strip()
-        if draw.textlength(trial, font=font) <= width:
-            cur = trial
+    # Greedy word wrap: keep adding words to the current line while the
+    # rendered line still fits the column, then break to a new line.
+    lines = []
+    current = ""
+    for word in text.split():
+        candidate = f"{current} {word}".strip()
+        if draw.textlength(candidate, font=font) <= width:
+            current = candidate
         else:
-            if cur:
-                lines.append(cur)
-            cur = w_
-    if cur:
-        lines.append(cur)
+            if current:
+                lines.append(current)
+            current = word
+    if current:
+        lines.append(current)
     return lines
 
 
 def fit(draw, text, path, start, width, max_lines, minimum=15):
-    size = start
-    while size > minimum:
-        f = ImageFont.truetype(path, size)
-        if len(wrap(draw, text, f, width)) <= max_lines:
-            return f
-        size -= 1
+    # Largest size, starting from `start`, whose wrapped text fits in
+    # `max_lines` lines; never below `minimum`, which is returned as-is.
+    for size in range(start, minimum, -1):
+        font = ImageFont.truetype(path, size)
+        if len(wrap(draw, text, font, width)) <= max_lines:
+            return font
     return ImageFont.truetype(path, minimum)
 
 
